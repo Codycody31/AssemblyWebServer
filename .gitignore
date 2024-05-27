@@ -1,0 +1,20 @@
+# Ignore binary files
+assemblywebserver
+*.o
+
+# Ignore executables
+*.exe
+
+# Ignore build directory if exists
+build/
+
+# Ignore editor specific files
+*.swp
+*~
+
+# Ignore dist directory
+dist/
+
+# Ignore IDE specific files
+.idea
+.vscode
