@@ -79,39 +79,44 @@ _start:
     ; TODO: Crappy code below, need to fix
     ; somewhere I am not converting the port number correctly and then it fails to bind to the port
 
-    pop       rax ; pop the arg count
-    pop       rax ; pop the program name
-    pop       rsi ; pop the only argument
-    call string_to_int  ; convert the argument string to int
-
-    ; we need to make the int to reverse byte order
-    mov       bl, ah
-    mov       bh, al
-    mov [pop_sa + sockaddr_in.sin_port], bx
-
+    ; write first part of port attmpt msg, must do before due to popping ltr to rsi
     mov     rax, SYS_WRITE           ; syscall number for SYS_WRITE
     mov     rdi, STDOUT           ; file descriptor for STDOUT
     mov     rsi, port_attempt_message
     mov     rdx, port_attempt_message_len
     syscall
 
-    ; Convert port number to string
-    mov     ax, word [pop_sa + sockaddr_in.sin_port]
-    call    int_to_str
+    pop       rax ; pop the arg count
+    pop       rax ; pop the program name
+    pop       rsi ; pop the only argument
 
-    ; Write port number to STDOUT
-    mov     rax, SYS_WRITE           ; syscall number for SYS_WRITE
-    mov     rdi, STDOUT           ; file descriptor for STDOUT
-    lea     rsi,port_str
-    mov     rdx, 6
+    ; Calculate the length of the port number string
+    ; Done to prevent the fetching of more memory then we are suppose to, given that if we did mov rdx, [rsi] it would result in dumping the shell stuff also
+    ; For example env vars and other things and not just the port number as expected
+    xor     rcx, rcx        ; Clear rcx to use as a counter
+    mov     rdi, rsi        ; Copy rsi to rdi to use it in the loop
+calc_length:
+    cmp     byte [rdi], 0   ; Check if the current byte is 0 (end of string)
+    je      length_done     ; If it is, we're done
+    inc     rdi             ; Move to the next byte
+    inc     rcx             ; Increment the counter (size of port number stored at rsi)
+    jmp     calc_length     ; Repeat the loop
+length_done:
+
+    ; Write the port number string to STDOUT
+    mov     rax, SYS_WRITE          ; syscall number for SYS_WRITE
+    mov     rdi, STDOUT             ; file descriptor for STDOUT
+    ; rsi already holds the port number string
+    mov     rdx, rcx                ; rdx holds the length of the string
     syscall
 
-    ; Write newline to STDOUT
-    mov     rax, SYS_WRITE           ; syscall number for SYS_WRITE
-    mov     rdi, STDOUT           ; file descriptor for STDOUT
-    lea     rsi, newline
-    mov     rdx, 1
-    syscall
+    call write_newline
+
+    call string_to_int  ; convert the argument string to int
+    ; we need to make the int to reverse byte order
+    mov       bl, ah
+    mov       bh, al
+    mov [pop_sa + sockaddr_in.sin_port], bx
 
     ;; Initialize socket
     call   _socket
@@ -286,3 +291,12 @@ _exit:
     .perform_exit:
     mov        rax, 60
     syscall
+
+;; Utility/QoL code
+write_newline:
+    mov     rax, 1        ; syscall number for SYS_WRITE
+    mov     rdi, 1        ; file descriptor for STDOUT
+    lea     rsi, [newline]
+    mov     rdx, 1
+    syscall
+    ret
