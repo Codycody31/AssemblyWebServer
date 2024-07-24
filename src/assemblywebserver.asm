@@ -60,6 +60,9 @@ section .data
     close_msg           db "Closing connection", 0x0a, 0
     close_msg_len       equ $ - close_msg
 
+    default_port_str    db "8000", 0
+    default_port_str_len equ $ - default_port_str
+
     newline db 0xA, 0         ; Newline
 
     ;; sockaddr_in structure for the address the listening socket binds to
@@ -80,29 +83,37 @@ _start:
     mov      word [client], 0
 
     ; Write welcome msg to STDOUT
-    mov     rax, SYS_WRITE          ; syscall number for SYS_WRITE
-    mov     rdi, STDOUT             ; file descriptor for STDOUT
     mov     rsi, welcome_msg
     mov     rdx, welcome_msg_len
-    syscall
+    call    write_string
 
     ; write first part of port attmpt msg, must do before due to popping ltr to rsi
-    mov     rax, SYS_WRITE           ; syscall number for SYS_WRITE
-    mov     rdi, STDOUT           ; file descriptor for STDOUT
     mov     rsi, port_attempt_msg
     mov     rdx, port_attempt_msg_len
-    syscall
+    call    write_string
 
     pop       rax ; pop the arg count
     pop       rax ; pop the program name
     pop       rsi ; pop the only argument
 
+    ; Check if a port number was provided
+    test    rsi, rsi           ; Test if RSI is zero (no argument provided)
+    jz      use_default_port   ; If zero, use the default port
+
+    cmp     byte [rsi], 0      ; Check if the first byte is null (empty string)
+    jne     port_provided      ; If not null, port number is provided
+
+use_default_port:
+    ; Use default port if none provided
+    mov     rsi, default_port_str
+port_provided:
     ; Calculate the length of the port number string
-    ; Done to prevent the fetching of more memory then we are suppose to, given that if we did mov rdx, [rsi] it would result in dumping the shell stuff also
-    ; For example env vars and other things and not just the port number as expected
     xor     rcx, rcx        ; Clear rcx to use as a counter
     mov     rdi, rsi        ; Copy rsi to rdi to use it in the loop
 calc_length:
+    ; Calculate the length of the port number string
+    ; Done to prevent the fetching of more memory then we are suppose to, given that if we did mov rdx, [rsi] it would result in dumping the shell stuff also
+    ; For example env vars and other things and not just the port number as expected
     cmp     byte [rdi], 0   ; Check if the current byte is 0 (end of string)
     je      length_done     ; If it is, we're done
     inc     rdi             ; Move to the next byte
@@ -412,5 +423,14 @@ write_newline:
     mov     rdi, 1        ; file descriptor for STDOUT
     lea     rsi, [newline]
     mov     rdx, 1
+    syscall
+    ret
+
+;; Writes a string to STDOUT
+;; Uses: rax, rdi, rsi, rdx
+;; Usage: rsi = pointer to string, rdx = length of string
+write_string:
+    mov     rax, 1        ; syscall number for SYS_WRITE
+    mov     rdi, 1        ; file descriptor for STDOUT
     syscall
     ret

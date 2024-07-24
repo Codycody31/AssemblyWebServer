@@ -1,8 +1,8 @@
-# My Web Server in Assembly (AMD64)
+# My Web Server in Assembly (x86_64)
 
 ## Description
 
-This project is a simple web server written in assembly language for AMD64 architecture.
+This project is a simple web server written in assembly language for x86_64 architecture.
 
 ## References
 
@@ -32,7 +32,8 @@ sudo apt-get install nasm gcc
 To build the project, run:
 
 ```sh
-make
+make mk-dirs
+make build
 ```
 
 ## Running the Server
@@ -40,7 +41,7 @@ make
 After building the project, run the server with:
 
 ```sh
-./server
+./dist/assemblywebserver <port number:optional>
 ```
 
 ## File Structure
