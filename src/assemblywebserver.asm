@@ -51,6 +51,15 @@ section .data
     accept_err_msg      db "Could not accept connection attempt", 0x0a, 0
     accept_err_msg_len  equ $ - accept_err_msg
 
+    accept_msg          db "Client connected!", 0x0a, 0
+    accept_msg_len      equ $ - accept_msg
+
+    response_msg        db `HTTP/1.1 200 OK\nConnection: close\nContent-length: 0\n\n`
+    response_msg_len    equ $ - response_msg
+
+    close_msg           db "Closing connection", 0x0a, 0
+    close_msg_len       equ $ - close_msg
+
     newline db 0xA, 0         ; Newline
 
     ;; sockaddr_in structure for the address the listening socket binds to
@@ -108,6 +117,10 @@ length_done:
     mov     rdx, rcx                ; rdx holds the length of the string
     syscall
 
+    ; Mov the string length to r13, and the string to r14
+    mov r13, rdx
+    mov r14, rsi
+
     ; Write newline to STDOUT but preserve rsi
     mov    r15, rsi
     call write_newline
@@ -135,16 +148,64 @@ length_done:
     syscall
 
     ; Write port number to STDOUT
-    mov     rax, SYS_WRITE           ; syscall number for SYS_WRITE
-    mov     rdi, STDOUT           ; file descriptor for STDOUT
-    lea     rsi, [port_str]
-    mov     rdx, 6
+    ; mov     rax, SYS_WRITE           ; syscall number for SYS_WRITE
+    ; mov     rdi, STDOUT           ; file descriptor for STDOUT
+    ; lea     rsi, [port_str]
+    ; mov     rdx, 6
+    ; syscall
+
+    ; Mov the string length to r13, and the string to r14
+    mov rcx, r13
+    mov rsi, r14
+
+    ; Write the port number string to STDOUT
+    mov     rax, SYS_WRITE          ; syscall number for SYS_WRITE
+    mov     rdi, STDOUT             ; file descriptor for STDOUT
+    ; rsi already holds the port number string
+    mov     rdx, rcx                ; rdx holds the length of the string
     syscall
 
+    xor rsi, rsi
+    xor r13, r13
+    xor r14, r14
+
     ; Write newline to STDOUT but preserve rsi
-    mov    r15, rsi
     call write_newline
-    mov    rsi, r15
+
+    ;; Main loop handles clients connecting (accept()) then echoes any input
+     ;; back to the client
+     .mainloop:
+         call     _accept
+
+         ;; Read and re-send all bytes sent by the client until the client hangs
+         ;; up the connection on their end.
+         ; .readloop:
+         ;     call     _read
+             call     _echo
+
+             ;; read_count is set to zero when client hangs up
+             ; mov     rax, [read_count]
+             ; cmp     rax, 0
+         ;     jmp      .read_complete
+         ; jmp .readloop
+
+         ; .read_complete:
+         ;; Close client socket
+
+         ; mov rax, 35
+         ; mov rdi, timespec
+         ; xor rsi, rsi
+         ; syscall
+
+
+         mov    rdi, [client]
+         call   _close_sock
+         mov    word [client], 0
+     jmp    .mainloop
+
+     ;; Exit with success (return 0)
+     mov     rdi, 0
+     call     _exit
 
 ;; Performs a sys_socket call to initialise a TCP/IP listening socket, storing
 ;; socket file descriptor in the sock variable
@@ -234,6 +295,58 @@ int_to_str:
     pop     rcx
     pop     rbx
     ret
+
+    ;; Accepts a connection from a client, storing the client socket file descriptor
+    ;; in the client variable and logging the connection to stdout
+    _accept:
+        ;; Call sys_accept
+        mov       rax, 43         ; SYS_ACCEPT
+        mov       rdi, [sock]     ; listening socket fd
+        mov       rsi, 0          ; NULL sockaddr_in value as we don't need that data
+        mov       rdx, 0          ; NULLs have length 0
+        syscall
+
+        ;; Check call succeeded
+        cmp       rax, 0
+        jl        _accept_fail
+
+        ;; Store returned fd in variable
+        mov     [client], rax
+
+        ;; Log connection to stdout
+        mov       rax, 1             ; SYS_WRITE
+        mov       rdi, 1             ; STDOUT
+        mov       rsi, accept_msg
+        mov       rdx, accept_msg_len
+        syscall
+
+        ret
+
+    ;; Reads up to 256 bytes from the client into echobuf and sets the read_count variable
+    ;; to be the number of bytes read by sys_read
+    _read:
+        ;; Call sys_read
+        mov     rax, 0          ; SYS_READ
+        mov     rdi, [client]   ; client socket fd
+        mov     rsi, echobuf    ; buffer
+        mov     rdx, 256        ; read 256 bytes
+        syscall
+
+        ;; Copy number of bytes read to variable
+        mov     [read_count], rax
+
+        ret
+
+    ;; Sends up to the value of read_count bytes from echobuf to the client socket
+    ;; using sys_write
+    _echo:
+        mov     rax, 1               ; SYS_WRITE
+        mov     rdi, [client]        ; client socket fd
+        mov     rsi, response_msg         ; buffer
+        mov     rdx, response_msg_len    ; number of bytes received in _read
+        syscall
+
+        ret
 
 ;; Performs sys_close on the socket in rdi
 _close_sock:
