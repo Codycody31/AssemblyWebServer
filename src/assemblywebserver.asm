@@ -18,19 +18,26 @@ struc sockaddr_in
     .sin_zero resb 8
 endstruc
 
+section .bss
+    ; BSS section for uninitialized data
+    sock resw 4           ; Socket file descriptor
+    client resw 4         ; Client file descriptor
+    port_str resb 6          ; Buffer to store port string
+    echobuf resb 256
+    read_count resw 2
+
 section .data
-    ;; Data section for initialized data (mainly strings and structs)
-    welcome_message db "Welcome to the Web Server in Assembly!", 0xA
-    welcome_message_len equ $ - welcome_message
+    welcome_msg db "Welcome to the Web Server in Assembly!", 0xA
+    welcome_msg_len equ $ - welcome_msg
 
-    port_attempt_message db "Attempting to bind to port: ", 0
-    port_attempt_message_len equ $ - port_attempt_message
+    port_attempt_msg db "Attempting to bind to port: ", 0
+    port_attempt_msg_len equ $ - port_attempt_msg
 
-    port_message db "Server is listening on port: ", 0
-    port_message_len equ $ - port_message
+    port_msg db "Server is listening on port: ", 0
+    port_msg_len equ $ - port_msg
 
-    connection_message db "Accepted connection!", 0xA
-    connection_message_len equ $ - connection_message
+    connection_msg db "Accepted connection!", 0xA
+    connection_msg_len equ $ - connection_msg
 
     sock_err_msg        db "Failed to initialise socket", 0x0a, 0
     sock_err_msg_len    equ $ - sock_err_msg
@@ -48,42 +55,33 @@ section .data
 
     ;; sockaddr_in structure for the address the listening socket binds to
     pop_sa istruc sockaddr_in
-        at sockaddr_in.sin_family, dw AF_INET            ; AF_INET
+        at sockaddr_in.sin_family, dw 2            ; AF_INET
         at sockaddr_in.sin_port, dw 0xa1ed        ; port 60833
         at sockaddr_in.sin_addr, dd 0             ; localhost
         at sockaddr_in.sin_zero, dd 0, 0
     iend
     sockaddr_in_len     equ $ - pop_sa
-    
-section .bss
-    ; BSS section for uninitialized data
-    sock_fd resb 4           ; Socket file descriptor
-    client_fd resb 4         ; Client file descriptor
-    port_str resb 6          ; Buffer to store port string
-    
+
 section .text
     global _start
 
 _start:
     ;; Initialise listening and client socket values to 0, used for cleanup handling
-    mov      word [sock_fd], 0
-    mov      word [client_fd], 0
+    mov      word [sock], 0
+    mov      word [client], 0
 
-    ; Write welcome message to STDOUT
+    ; Write welcome msg to STDOUT
     mov     rax, SYS_WRITE          ; syscall number for SYS_WRITE
     mov     rdi, STDOUT             ; file descriptor for STDOUT
-    mov     rsi, welcome_message
-    mov     rdx, welcome_message_len
+    mov     rsi, welcome_msg
+    mov     rdx, welcome_msg_len
     syscall
-
-    ; TODO: Crappy code below, need to fix
-    ; somewhere I am not converting the port number correctly and then it fails to bind to the port
 
     ; write first part of port attmpt msg, must do before due to popping ltr to rsi
     mov     rax, SYS_WRITE           ; syscall number for SYS_WRITE
     mov     rdi, STDOUT           ; file descriptor for STDOUT
-    mov     rsi, port_attempt_message
-    mov     rdx, port_attempt_message_len
+    mov     rsi, port_attempt_msg
+    mov     rdx, port_attempt_msg_len
     syscall
 
     pop       rax ; pop the arg count
@@ -110,12 +108,17 @@ length_done:
     mov     rdx, rcx                ; rdx holds the length of the string
     syscall
 
+    ; Write newline to STDOUT but preserve rsi
+    mov    r15, rsi
     call write_newline
+    mov    rsi, r15
 
     call string_to_int  ; convert the argument string to int
+
     ; we need to make the int to reverse byte order
     mov       bl, ah
     mov       bh, al
+
     mov [pop_sa + sockaddr_in.sin_port], bx
 
     ;; Initialize socket
@@ -124,11 +127,11 @@ length_done:
     ;; Bind and Listen
     call _listen
 
-    ; Write port message to STDOUT
+    ; Write port msg to STDOUT
     mov     rax, SYS_WRITE           ; syscall number for SYS_WRITE
     mov     rdi, STDOUT           ; file descriptor for STDOUT
-    mov     rsi, port_message
-    mov     rdx, port_message_len
+    mov     rsi, port_msg
+    mov     rdx, port_msg_len
     syscall
 
     ; Write port number to STDOUT
@@ -138,19 +141,19 @@ length_done:
     mov     rdx, 6
     syscall
 
-    ; Write newline to STDOUT
-    mov     rax, SYS_WRITE           ; syscall number for SYS_WRITE
-    mov     rdi, STDOUT           ; file descriptor for STDOUT
-    lea     rsi, [newline]
-    mov     rdx, 1
-    syscall
+    ; Write newline to STDOUT but preserve rsi
+    mov    r15, rsi
+    call write_newline
+    mov    rsi, r15
 
+;; Performs a sys_socket call to initialise a TCP/IP listening socket, storing
+;; socket file descriptor in the sock variable
 _socket:
     ; Create a socket
     mov     rax, SYS_SOCKET          ; syscall number for SYS_SOCKET
-    mov     edi, AF_INET           ; AF_INET
-    mov     esi, SOCK_STREAM          ; SOCK_STREAM
-    xor     edx, edx         ; Protocol (0 -> IP)
+    mov     rdi, AF_INET           ; AF_INET
+    mov     rsi, SOCK_STREAM          ; SOCK_STREAM
+    mov     rdx, 0         ; Protocol (0 -> IP)
     syscall
 
     ;; Check socket was created correctly
@@ -158,14 +161,17 @@ _socket:
     jle        _socket_fail
 
     ;; Store socket descriptor in variable
-    mov     [sock_fd], eax   ; Save socket file descriptor
+    mov     [sock], rax   ; Save socket file descriptor
 
+    ret
+
+;; Calls sys_bind and sys_listen to start listening for connections
 _listen:
     ; Bind the socket
     mov     rax, SYS_BIND          ; syscall number for SYS_BIND
-    mov     edi, [sock_fd]   ; Socket file descriptor
+    mov     rdi, [sock]   ; Socket file descriptor
     lea     rsi, pop_sa ; Pointer to sockaddr_in
-    mov     edx, sockaddr_in_len ; Size of sockaddr_in
+    mov     rdx, sockaddr_in_len ; Size of sockaddr_in
     syscall
 
     ;; Check socket was bound correctly
@@ -175,8 +181,7 @@ _listen:
 
     ; Listen on the socket
     mov     rax, SYS_LISTEN          ; syscall number for SYS_LISTEN
-    mov     edi, [sock_fd]   ; Socket file descriptor
-    mov     esi, 10          ; Backlog
+    mov     rsi, 1          ; Backlog
     syscall
 
     ;; Check socket was bound correctly
@@ -239,8 +244,8 @@ _close_sock:
 
 ;; Error Handling code
 ;; _*_fail handle the population of the rsi and rdx registers with the correct
-;; error messages for the labelled situation. They then call _fail to show the
-;; error message and exit the application.
+;; error msgs for the labelled situation. They then call _fail to show the
+;; error msg and exit the application.
 _socket_fail:
     mov     rsi, sock_err_msg
     mov     rdx, sock_err_msg_len
@@ -261,9 +266,9 @@ _accept_fail:
     mov     rdx, accept_err_msg_len
     call    _fail
 
-;; Calls the sys_write syscall, writing an error message to stderr, then exits
-;; the application. rsi and rdx must be populated with the error message and
-;; length of the error message before calling _fail
+;; Calls the sys_write syscall, writing an error msg to stderr, then exits
+;; the application. rsi and rdx must be populated with the error msg and
+;; length of the error msg before calling _fail
 _fail:
     mov        rax, 1 ; SYS_WRITE
     mov        rdi, 2 ; STDERR
@@ -275,17 +280,17 @@ _fail:
 ;; Exits cleanly, checking if the listening or client sockets need to be closed
 ;; before calling sys_exit
 _exit:
-    mov        rax, [sock_fd]
+    mov        rax, [sock]
     cmp        rax, 0
     je         .client_check
-    mov        rdi, [sock_fd]
+    mov        rdi, [sock]
     call       _close_sock
 
     .client_check:
-    mov        rax, [client_fd]
+    mov        rax, [client]
     cmp        rax, 0
     je         .perform_exit
-    mov        rdi, [client_fd]
+    mov        rdi, [client]
     call       _close_sock
 
     .perform_exit:
@@ -293,6 +298,9 @@ _exit:
     syscall
 
 ;; Utility/QoL code
+
+;; Writes a newline to STDOUT
+;; Uses: rax, rdi, rsi, rdx
 write_newline:
     mov     rax, 1        ; syscall number for SYS_WRITE
     mov     rdi, 1        ; file descriptor for STDOUT
