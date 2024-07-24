@@ -147,13 +147,6 @@ length_done:
     mov     rdx, port_msg_len
     syscall
 
-    ; Write port number to STDOUT
-    ; mov     rax, SYS_WRITE           ; syscall number for SYS_WRITE
-    ; mov     rdi, STDOUT           ; file descriptor for STDOUT
-    ; lea     rsi, [port_str]
-    ; mov     rdx, 6
-    ; syscall
-
     ; Mov the string length to r13, and the string to r14
     mov rcx, r13
     mov rsi, r14
