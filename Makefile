@@ -2,6 +2,7 @@ NASM=nasm
 GCC=gcc
 LD=ld
 CFLAGS=-nostdlib -static -m64
+DEBUG_FLAGS=-g
 
 SRC=src
 OBJ=assemblywebserver.o
@@ -11,6 +12,10 @@ OBJ=assemblywebserver.o
 .PHONY: all
 all: help
 
+.PHONY: mk-dirs
+mk-dirs: ## Create the necessary directories
+	mkdir -p dist
+
 ##@ Help
 .PHONY: help
 help: ## Display this help message
@@ -19,18 +24,26 @@ help: ## Display this help message
 ##@ Build
 .PHONY: build
 build: $(OBJ) ## Build the project to a binary
-	mkdir -p dist
 	$(LD) $(LDFLAGS) -o dist/assemblywebserver dist/$^
+
+.PHONY: build-debug
+build-debug: CFLAGS += $(DEBUG_FLAGS)
+build-debug: $(OBJ) ## Build the project with debug symbols
+	$(LD) $(LDFLAGS) -o dist/assemblywebserver-debug dist/$^
 
 ##@ Run
 .PHONY: start
 start: ## Start the built binary
 	./dist/assemblywebserver
 
+.PHONY: start-debug
+start-debug: ## Start the built binary with debug symbols
+	gdb ./dist/assemblywebserver-debug
+
 %.o: $(SRC)/%.asm
-	$(NASM) -f elf64 -o dist/$@ $<
+	$(NASM) -f elf64 -g -F dwarf -o dist/$@ $<
 
 ##@ Clean
 .PHONY: clean
 clean: ## Clean build artifacts
-	rm -f dist/$(OBJ) dist/assemblywebserver
+	rm -f dist/$(OBJ) dist/assemblywebserver dist/assemblywebserver-debug
