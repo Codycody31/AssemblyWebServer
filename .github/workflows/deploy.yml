@@ -39,11 +39,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm # or pnpm / yarn
-        working-directory: ${{ env.working-directory }}
+          cache: npm
       - name: Setup Pages
         uses: actions/configure-pages@v4
-        working-directory: ${{ env.working-directory }}
       - name: Install dependencies
         run: npm ci
         working-directory: ${{ env.working-directory }}
@@ -54,7 +52,6 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: docs/.vitepress/dist
-        working-directory: ${{ env.working-directory }}
 
   # Deployment job
   deploy:
