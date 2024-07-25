@@ -27,6 +27,9 @@ jobs:
   # Build job
   build:
     runs-on: ubuntu-latest
+    env:
+      working-directory: docs
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,18 +40,21 @@ jobs:
         with:
           node-version: 20
           cache: npm # or pnpm / yarn
+        working-directory: ${{ env.working-directory }}
       - name: Setup Pages
         uses: actions/configure-pages@v4
-      - name: Entire directory
-        run: cd docs
+        working-directory: ${{ env.working-directory }}
       - name: Install dependencies
         run: npm ci
+        working-directory: ${{ env.working-directory }}
       - name: Build with VitePress
         run: npm run build
+        working-directory: ${{ env.working-directory }}
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: docs/.vitepress/dist
+        working-directory: ${{ env.working-directory }}
 
   # Deployment job
   deploy:
