@@ -54,7 +54,7 @@ section .data
     accept_msg          db "Client connected!", 0x0a, 0
     accept_msg_len      equ $ - accept_msg
 
-    response_msg        db `HTTP/1.1 200 OK\nConnection: close\nContent-length: 0\n\n`
+    response_msg        db `HTTP/1.1 200 OK\r\nConnection: close\r\nContent-length: 0\r\n`
     response_msg_len    equ $ - response_msg
 
     close_msg           db "Closing connection", 0x0a, 0
@@ -425,6 +425,8 @@ write_newline:
     mov     rdx, 1
     syscall
     ret
+
+    call write_string
 
 ;; Writes a string to STDOUT
 ;; Uses: rax, rdi, rsi, rdx
