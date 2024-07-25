@@ -7,6 +7,7 @@ export default defineConfig({
   description:
     "This project is a simple web server written in assembly language for AMD64 architecture.",
   lang: "en-US",
+  base: "/AssemblyWebServer/",
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
     nav: [{ text: "Home", link: "/" }],
