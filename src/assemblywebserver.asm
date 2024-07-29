@@ -300,57 +300,57 @@ int_to_str:
     pop     rbx
     ret
 
-    ;; Accepts a connection from a client, storing the client socket file descriptor
-    ;; in the client variable and logging the connection to stdout
-    _accept:
-        ;; Call sys_accept
-        mov       rax, 43         ; SYS_ACCEPT
-        mov       rdi, [sock]     ; listening socket fd
-        mov       rsi, 0          ; NULL sockaddr_in value as we don't need that data
-        mov       rdx, 0          ; NULLs have length 0
-        syscall
+;; Accepts a connection from a client, storing the client socket file descriptor
+;; in the client variable and logging the connection to stdout
+_accept:
+    ;; Call sys_accept
+    mov       rax, 43         ; SYS_ACCEPT
+    mov       rdi, [sock]     ; listening socket fd
+    mov       rsi, 0          ; NULL sockaddr_in value as we don't need that data
+    mov       rdx, 0          ; NULLs have length 0
+    syscall
 
-        ;; Check call succeeded
-        cmp       rax, 0
-        jl        _accept_fail
+    ;; Check call succeeded
+    cmp       rax, 0
+    jl        _accept_fail
 
-        ;; Store returned fd in variable
-        mov     [client], rax
+    ;; Store returned fd in variable
+    mov     [client], rax
 
-        ;; Log connection to stdout
-        mov       rax, 1             ; SYS_WRITE
-        mov       rdi, 1             ; STDOUT
-        mov       rsi, accept_msg
-        mov       rdx, accept_msg_len
-        syscall
+    ;; Log connection to stdout
+    mov       rax, 1             ; SYS_WRITE
+    mov       rdi, 1             ; STDOUT
+    mov       rsi, accept_msg
+    mov       rdx, accept_msg_len
+    syscall
 
-        ret
+    ret
 
-    ;; Reads up to 256 bytes from the client into echobuf and sets the read_count variable
-    ;; to be the number of bytes read by sys_read
-    _read:
-        ;; Call sys_read
-        mov     rax, 0          ; SYS_READ
-        mov     rdi, [client]   ; client socket fd
-        mov     rsi, echobuf    ; buffer
-        mov     rdx, 256        ; read 256 bytes
-        syscall
+;; Reads up to 256 bytes from the client into echobuf and sets the read_count variable
+;; to be the number of bytes read by sys_read
+_read:
+    ;; Call sys_read
+    mov     rax, 0          ; SYS_READ
+    mov     rdi, [client]   ; client socket fd
+    mov     rsi, echobuf    ; buffer
+    mov     rdx, 256        ; read 256 bytes
+    syscall
 
-        ;; Copy number of bytes read to variable
-        mov     [read_count], rax
+    ;; Copy number of bytes read to variable
+    mov     [read_count], rax
 
-        ret
+    ret
 
-    ;; Sends up to the value of read_count bytes from echobuf to the client socket
-    ;; using sys_write
-    _echo:
-        mov     rax, 1               ; SYS_WRITE
-        mov     rdi, [client]        ; client socket fd
-        mov     rsi, response_msg         ; buffer
-        mov     rdx, response_msg_len    ; number of bytes received in _read
-        syscall
+;; Sends up to the value of read_count bytes from echobuf to the client socket
+;; using sys_write
+_echo:
+    mov     rax, 1               ; SYS_WRITE
+    mov     rdi, [client]        ; client socket fd
+    mov     rsi, response_msg         ; buffer
+    mov     rdx, response_msg_len    ; number of bytes received in _read
+    syscall
 
-        ret
+    ret
 
 ;; Performs sys_close on the socket in rdi
 _close_sock:
