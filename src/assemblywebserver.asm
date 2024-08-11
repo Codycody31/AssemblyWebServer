@@ -9,6 +9,9 @@ SYS_BIND    equ 49 ; bind a socket
 SYS_LISTEN  equ 50 ; listen for connections
 SYS_ACCEPT  equ 43 ; accept a connection
 SYS_CLOSE   equ 3 ; close a file descriptor
+SYS_CREATE  equ 8
+SYS_MKDIR   equ 83
+SYS_STAT    equ 4
 
 ;; Data definitions
 struc sockaddr_in
@@ -27,6 +30,8 @@ section .bss
     read_count resw 2
 
 section .data
+    stat_buf times 144 db 0
+
     welcome_msg db "Welcome to the Web Server in Assembly!", 0xA
     welcome_msg_len equ $ - welcome_msg
 
@@ -51,6 +56,9 @@ section .data
     accept_err_msg      db "Could not accept connection attempt", 0x0a, 0
     accept_err_msg_len  equ $ - accept_err_msg
 
+    web_root_path_creation_error_msg db "Failed to create directory.", 10
+    web_root_path_creation_error_msg_len equ $ - web_root_path_creation_error_msg
+
     accept_msg          db "Client connected!", 0x0a, 0
     accept_msg_len      equ $ - accept_msg
 
@@ -62,6 +70,9 @@ section .data
 
     default_port_str    db "8000", 0
     default_port_str_len equ $ - default_port_str
+
+    web_root_path            db "./www", 0
+    weB_root_len        equ $ - web_root_path
 
     newline db 0xA, 0         ; Newline
 
@@ -86,6 +97,32 @@ _start:
     mov     rsi, welcome_msg
     mov     rdx, welcome_msg_len
     call    write_string
+    
+    ;; TODO: Pass all of this code off to a call, cleaning up _start
+    ; TODO: load web_root_path, port number, etc, from .cfg file or whatever (similar to Apache)
+    ; first check PWD for aws.cfg (ehhhh...should be fine?), or /etc/ blablabla proper linux dir /aws.cfg
+
+    ;; Check if the directory exists using `stat`
+    mov     rax, SYS_STAT
+    mov     rdi, web_root_path
+    lea     rsi, [stat_buf]
+    syscall
+
+    ;; Check if stat was successful
+    test    rax, rax
+    jz      .web_root_path_exists
+
+    ;; If directory doesn't exist, create it using `mkdir`
+    mov     rax, SYS_MKDIR
+    mov     rdi, web_root_path
+    mov     rsi, 0o777
+    syscall
+
+    ;; Check if the mkdir syscall was successful
+    test    rax, rax
+    js      _web_root_path_creation_error
+
+.web_root_path_exists:
 
     ; write first part of port attmpt msg, must do before due to popping ltr to rsi
     mov     rsi, port_attempt_msg
@@ -382,6 +419,11 @@ _accept_fail:
     mov     rsi, accept_err_msg
     mov     rdx, accept_err_msg_len
     call    _fail
+
+_web_root_path_creation_error:
+    mov     rsi, web_root_path_creation_error_msg
+    mov     rdx, web_root_path_creation_error_msg_len
+    call _fail
 
 ;; Calls the sys_write syscall, writing an error msg to stderr, then exits
 ;; the application. rsi and rdx must be populated with the error msg and

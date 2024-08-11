@@ -9,6 +9,9 @@ This project is a simple web server written in assembly language for x86_64 arch
 - [assembly64.pdf](http://www.egr.unlv.edu/%7Eed/assembly64.pdf)
 - [Assembly socket server](https://gist.github.com/stellanhaglund/31e2f6946fb5c29fff1190d6d628dc11)
 - [ARMv8](https://courses.cs.washington.edu/courses/cse469/19wi/arm64.pdf)
+- [coder32 edition | X86 Opcode and Instruction Reference 1.12](http://ref.x86asm.net/coder32.html)
+- [syscalls(2) — Linux manual page](https://man7.org/linux/man-pages/man2/syscalls.2.html)
+- [Searchable Linux Syscall Table](https://filippo.io/linux-syscall-table/)
 
 ## Features
 
