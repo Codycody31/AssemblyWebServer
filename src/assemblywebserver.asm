@@ -28,6 +28,8 @@ section .bss
     port_str resb 6          ; Buffer to store port string
     echobuf resb 256
     read_count resw 2
+    fd  resd 1                  ; File descriptor
+    bytes_read resd 1           ; Number of bytes read
 
 section .data
     stat_buf times 144 db 0
@@ -74,6 +76,12 @@ section .data
     web_root_path            db "./www", 0
     weB_root_len        equ $ - web_root_path
 
+    config_file             db "./www/aws.cfg", 0
+    config_file_len     equ $ - config_file
+
+    buffer   times 4096 db 0    ; Buffer to hold file contents (4 KiB)
+    length   equ $ - buffer     ; Length of the buffer
+
     newline db 0xA, 0         ; Newline
 
     ;; sockaddr_in structure for the address the listening socket binds to
@@ -99,8 +107,6 @@ _start:
     call    write_string
     
     ;; TODO: Pass all of this code off to a call, cleaning up _start
-    ; TODO: load web_root_path, port number, etc, from .cfg file or whatever (similar to Apache)
-    ; first check PWD for aws.cfg (ehhhh...should be fine?), or /etc/ blablabla proper linux dir /aws.cfg
 
     ;; Check if the directory exists using `stat`
     mov     rax, SYS_STAT
@@ -124,6 +130,86 @@ _start:
 
 .web_root_path_exists:
 
+    ; TODO: load web_root_path, port number, etc, from .cfg file or whatever (similar to Apache)
+    ; first check PWD for aws.cfg (ehhhh...should be fine?), or /etc/ blablabla proper linux dir /aws.cfg
+
+    ; Read File
+    
+    ; Open the file (syscall: sys_open)
+    mov rax, 2                  ; syscall number for sys_open (2)
+    lea rdi, [rel config_file]     ; filename pointer
+    mov rsi, 0                  ; O_RDONLY (read only)
+    syscall                     ; Call the kernel
+
+    test    rax, rax
+    js  code_after_file_stuff
+
+    mov [fd], rax               ; Store the file descriptor
+
+read_loop:
+    ; Read a chunk of the file (syscall: sys_read)
+    mov rax, 0                  ; syscall number for sys_read (0)
+    mov rdi, [fd]               ; file descriptor
+    lea rsi, [rel buffer]       ; buffer pointer
+    mov rdx, length             ; number of bytes to read (4 KiB)
+    syscall                     ; Call the kernel
+    mov [bytes_read], rax       ; Store the number of bytes read
+
+    ; Check for end of file (EOF)
+    cmp rax, 0                  ; Was the number of bytes read 0?
+    je close_file               ; If yes, we reached EOF, so close the file
+
+    ; Initialize pointers and flags
+    lea rsi, [rel buffer]       ; rsi points to the start of the buffer
+    mov rcx, [bytes_read]       ; rcx holds the number of bytes read
+    xor rbx, rbx                ; rbx will store the extracted port number
+    xor rdi, rdi                ; rdi will be used as a parsing flag (0 = not found, 1 = found)
+
+parse_chunk:
+    ; Check if we've parsed the entire buffer
+    cmp rcx, 0
+    je close_file          ; If zero, we have finished parsing the buffer
+
+    ; Check for "port="
+    mov al, byte [rsi]          ; Load current byte
+    cmp al, 'p'                 ; Is it 'p'?
+    jne next_byte
+    cmp byte [rsi+1], 'o'       ; Is the next byte 'o'?
+    jne next_byte
+    cmp byte [rsi+2], 'r'       ; Is the next byte 'r'?
+    jne next_byte
+    cmp byte [rsi+3], 't'       ; Is the next byte 't'?
+    jne next_byte
+    cmp byte [rsi+4], '='       ; Is the next byte '='?
+    jne next_byte
+
+    ; "port=" found, parse the number
+    add rsi, 4                  ; Skip the "port=" part
+    mov rdi, 0                  ; Set parsing flag to 1
+parse_port_number:
+    cmp byte [rsi], '\n'        ; Check for newline
+    je next_byte                ; Stop parsing if newline is found
+    cmp byte [rsi], '0'         ; Check if the character is a digit
+    jb next_byte                ; If less than '0', skip to the next byte
+    cmp byte [rsi], '9'         ; Check if the character is a digit
+    ja next_byte                ; If greater than '9', skip to the next byte
+
+    ; Convert character to digit and accumulate in rbx
+    sub byte [rsi], '0'         ; Convert ASCII to integer
+    imul rbx, rbx, 10           ; Multiply rbx by 10 (shift left by one decimal place)
+    add rbx, [rsi]              ; Add the digit to rbx
+
+next_byte:
+    inc rsi                     ; Move to the next byte
+    loop parse_chunk            ; Repeat until we've parsed all bytes
+
+close_file:
+    ; Close the file (syscall: sys_close)
+    mov rax, 3                  ; syscall number for sys_close (3)
+    mov rdi, [fd]               ; file descriptor
+    syscall                     ; Call the kernel
+
+code_after_file_stuff:
     ; write first part of port attmpt msg, must do before due to popping ltr to rsi
     mov     rsi, port_attempt_msg
     mov     rdx, port_attempt_msg_len
@@ -132,6 +218,19 @@ _start:
     pop       rax ; pop the arg count
     pop       rax ; pop the program name
     pop       rsi ; pop the only argument
+
+;     ; TODO: Check if RBX contains stuff
+;     ; If so convert to string, and overwrite default_port_str
+
+;     ; Find which one works
+;     cmp rbx, 0
+;     jz  no_config_port_number
+
+;     mov     ax, rbx
+;     call int_to_str
+;     mov     default_port_str, port_str
+
+; no_config_port_number:
 
     ; Check if a port number was provided
     test    rsi, rsi           ; Test if RSI is zero (no argument provided)
